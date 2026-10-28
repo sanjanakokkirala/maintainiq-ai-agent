@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MaintainIQ – Predictive Maintenance Agent</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f6f6f3;--card:#fff;--tx:#1d2230;--mu:#6a7083;--bd:#e4e4de;--ac:#c2570c;--rd:#d93a4a;--am:#d98a0b;--gn:#1c9a5b;--bl:#2f5bea}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14120f;--card:#1e1b17;--tx:#eee9e1;--mu:#a59f94;--bd:#322e27;--ac:#ff9a4d;--rd:#ff6b78;--am:#f2b04a;--gn:#4cd08d;--bl:#7a9bff;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#14120f;--card:#1e1b17;--tx:#eee9e1;--mu:#a59f94;--bd:#322e27;--ac:#ff9a4d;--rd:#ff6b78;--am:#f2b04a;--gn:#4cd08d;--bl:#7a9bff;color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.w{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:26px;margin:0 0 4px}h2{font-size:17px;margin:0 0 10px}
+.mu{color:var(--mu)}.sub{margin:0 0 18px}
+.grid{display:grid;gap:14px}.k{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}.two{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:14px}
+.kv{font-size:28px;font-weight:700}.tag{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600;color:#fff}
+.hi{background:var(--rd)}.md{background:var(--am)}.lo{background:var(--gn)}
+.sc{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:760px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--bd);font-size:14px;vertical-align:middle}th{color:var(--mu);font-weight:600}
+tr.t{cursor:pointer}tr.t:hover,tr.sel{background:color-mix(in srgb,var(--ac) 10%,transparent)}
+ol.al{padding-left:20px;margin:0}ol.al li{margin-bottom:8px}
+button{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:7px 12px;border-radius:8px;cursor:pointer}
+button:hover{border-color:var(--ac)}button.p{background:var(--ac);color:#fff;border-color:var(--ac)}
+.ag{background:color-mix(in srgb,var(--ac) 9%,var(--card));border-radius:10px;padding:12px;margin-top:10px;white-space:pre-wrap;min-height:60px}
+.bar{height:8px;border-radius:4px;background:var(--bd);overflow:hidden}.bar i{display:block;height:100%;background:var(--ac)}
+svg{display:block;width:100%;height:auto}
+code{background:var(--bd);padding:1px 6px;border-radius:4px;font-size:13px}
+</style></head><body><div class="w">
+<h1>🛠️ MaintainIQ</h1>
+<p class="mu sub">AI maintenance agent for a Tata Steel–style rolling-mill plant: predict failures from sensors, history and the production schedule, then plan maintenance. (Synthetic illustrative data.)</p>
+<div class="grid k" id="kpis"></div>
+<div class="c sc" style="margin-top:14px"><h2>Machine health – ranked by expected loss (click a row)</h2><table id="tbl"></table></div>
+<div class="grid two">
+<div class="c"><h2 id="dt">Detail</h2><svg id="ch" viewBox="0 0 520 190"></svg><div class="mu" style="font-size:13px">Sensor readings as % of healthy baseline (last 8 days)</div><div id="detail"></div></div>
+<div class="c"><h2>Agent</h2>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><button data-q="risk">Machines at risk</button><button data-q="pat">Failure patterns</button><button data-q="plan">Maintenance plan</button></div>
+<div class="ag" id="agent">Ask the agent. It reasons over the live scores in the table.</div>
+<h2 style="margin-top:16px">What-if</h2><button class="p" id="pmb">Apply recommended maintenance to selected</button><div id="wi"></div></div>
+</div>
+<div class="c"><h2>Algorithm used by the agent</h2><ol class="al">
+<li><b>Ingest</b> daily vibration, temperature and motor current, maintenance history (days since service, interval, failures in 12 months) and the production schedule (load, cost per downtime hour, next planned shutdown window).</li>
+<li><b>Baseline &amp; anomaly</b>: per sensor, <code>z = (recent − baseline mean) ÷ baseline spread</code>. Anomaly score <code>A</code> = average of clipped z-scores (0–6).</li>
+<li><b>Overdue ratio</b> <code>O = days since service ÷ service interval</code>.</li>
+<li><b>Failure probability (7-day)</b> <code>p = 1 ÷ (1 + e^−x)</code> with <code>x = −3.2 + 0.55·A + 0.9·max(0, O−0.8) + 0.25·past failures</code>.</li>
+<li><b>Remaining useful life</b>: vibration trend extrapolated to the alarm limit (7.1 mm/s).</li>
+<li><b>Expected loss</b> <code>p × repair hours × downtime cost per hour × load</code>, compared to the planned-maintenance cost to get savings.</li>
+<li><b>Schedule</b>: if RUL is shorter than the next planned window, act now; otherwise bundle the work into that window to avoid peak-production downtime.</li>
+<li><b>Diagnose pattern</b> from the dominant sensor: vibration → bearing/alignment, temperature → cooling/lubrication, current → motor/electrical, none → routine service.</li>
+</ol></div></div>
+<script>
+const $=i=>document.getElementById(i);
+const M=[
+{n:"Hot Mill Gearbox",ln:"Hot Strip Mill",v:[3.1,3.2,3.1,3.3,3.9,4.6,5.5,6.4],t:[68,69,68,70,74,78,83,88],c:[210,212,211,213,222,231,240,251],d:160,iv:120,f:3,load:95,cost:8,rh:14,win:5,pm:3},
+{n:"Blast Furnace Fan",ln:"Ironmaking",v:[2.4,2.5,2.4,2.5,2.6,2.6,2.8,3.0],t:[60,60,61,61,62,63,63,65],c:[180,181,180,182,182,184,185,187],d:70,iv:90,f:1,load:100,cost:12,rh:10,win:12,pm:2},
+{n:"Coil Conveyor Motor",ln:"Finishing",v:[1.8,1.9,1.8,1.8,1.9,1.9,1.8,1.9],t:[55,55,56,55,56,55,56,56],c:[90,91,90,90,91,90,91,90],d:40,iv:90,f:0,load:70,cost:3,rh:4,win:7,pm:.5},
+{n:"Cooling Water Pump",ln:"Hot Strip Mill",v:[2.0,2.0,2.1,2.0,2.1,2.1,2.1,2.2],t:[45,45,46,46,49,53,57,62],c:[95,95,96,96,99,103,108,113],d:130,iv:100,f:2,load:85,cost:6,rh:6,win:3,pm:1},
+{n:"Descaler Compressor",ln:"Hot Strip Mill",v:[2.9,3.0,3.0,3.1,3.3,3.5,3.8,4.0],t:[72,72,73,73,75,77,79,81],c:[140,141,140,142,146,150,154,158],d:100,iv:90,f:2,load:90,cost:7,rh:8,win:9,pm:1.5},
+{n:"Slab Caster Roller",ln:"Steelmaking",v:[2.2,2.2,2.3,2.2,2.3,2.3,2.4,2.4],t:[64,64,65,64,65,65,66,66],c:[160,161,160,161,161,162,162,163],d:55,iv:120,f:0,load:100,cost:15,rh:12,win:14,pm:2.5},
+{n:"Crane Hoist Drive",ln:"Stockyard",v:[1.5,1.6,1.5,1.6,1.9,2.3,2.8,3.4],t:[50,50,51,51,53,56,58,61],c:[120,121,120,122,128,135,142,150],d:145,iv:90,f:1,load:60,cost:2,rh:5,win:6,pm:.8},
+{n:"Packaging Line Drive",ln:"Dispatch",v:[1.2,1.2,1.3,1.2,1.3,1.2,1.3,1.3],t:[48,48,49,48,49,49,48,49],c:[70,70,71,70,70,71,70,71],d:30,iv:60,f:0,load:50,cost:1.5,rh:3,win:4,pm:.4}];
+const done={};let cur=null;
+const cl=(v,a,b)=>Math.max(a,Math.min(b,v));
+const avg=a=>a.reduce((s,v)=>s+v,0)/a.length;
+function z(a){const b=a.slice(0,4),m=avg(b),sd=Math.max(Math.sqrt(avg(b.map(x=>(x-m)**2))),m*.03);return cl((avg(a.slice(-2))-m)/sd,0,6)}
+function sc(m){
+ const zs={vibration:z(m.v),temperature:z(m.t),current:z(m.c)};
+ const dn=done[m.n];let A=avg(Object.values(zs));let O=m.d/m.iv;
+ if(dn){A*=.35;O=.1}
+ const x=-3.2+.55*A+.9*Math.max(0,O-.8)+.25*m.f,p=1/(1+Math.exp(-x));
+ const sl=(m.v[7]-m.v[4])/3,rul=sl>.02?cl((7.1-m.v[7])/sl,0,30):30;
+ const loss=p*m.rh*m.cost*(m.load/100)*1,sv=loss-m.pm;
+ const dom=Object.entries(zs).sort((a,b)=>b[1]-a[1])[0];
+ const pat=dn||A<1.2?(O>1?"routine service overdue":"none"):dom[0];
+ const act=dn?"Maintenance done":p>.5||rul<m.win?"Act now":p>.2?"Schedule in window":"Monitor";
+ return{A,O,p,rul,loss,sv,pat,act,lv:p>.5?"hi":p>.2?"md":"lo",dn};
+}
+const DX={vibration:"Check bearings, shaft alignment and balance",temperature:"Inspect cooling, lubrication and fouling",current:"Inspect motor windings, load and electrical supply","routine service overdue":"Perform routine service","none":"Continue condition monitoring"};
+function spark(a){const mn=Math.min(...a),mx=Math.max(...a),p=a.map((v,i)=>(i*9+2)+","+(22-(v-mn)/((mx-mn)||1)*18)).join(" ");return `<svg width="68" height="26" viewBox="0 0 68 26"><polyline points="${p}" fill="none" stroke="var(--ac)" stroke-width="2"/></svg>`}
+function run(){M.forEach(m=>m.s=sc(m));M.sort((a,b)=>b.s.loss-a.s.loss);cur=cur?M.find(x=>x.n==cur.n):M[0]}
+function render(){run();
+ const hi=M.filter(m=>m.s.lv=="hi").length,loss=M.reduce((t,m)=>t+m.s.loss,0),sv=M.filter(m=>m.s.sv>0&&!m.s.dn).reduce((t,m)=>t+m.s.sv,0),now=M.filter(m=>m.s.act=="Act now").length;
+ $("kpis").innerHTML=[["High-risk machines",hi+" of "+M.length],["Need action now",now],["Expected loss (7d)","₹"+loss.toFixed(1)+" L"],["Savings from PM","₹"+sv.toFixed(1)+" L"]].map(k=>`<div class="c" style="margin:0"><div class="mu">${k[0]}</div><div class="kv">${k[1]}</div></div>`).join("");
+ $("tbl").innerHTML="<tr><th>Machine</th><th>Line</th><th>Vibration</th><th>Overdue</th><th>Fail prob.</th><th>RUL</th><th>Exp. loss</th><th>Action</th></tr>"+M.map(m=>`<tr class="t${m==cur?" sel":""}" data-n="${m.n}"><td>${m.n}</td><td>${m.ln}</td><td>${spark(m.v)} ${m.v[7]}</td><td>${(m.s.O*100).toFixed(0)}%</td><td><span class="tag ${m.s.lv}">${(m.s.p*100).toFixed(0)}%</span></td><td>${m.s.rul>=30?"30+":m.s.rul.toFixed(0)} d</td><td>₹${m.s.loss.toFixed(1)} L</td><td>${m.s.act}</td></tr>`).join("");
+ detail()}
+function detail(){const m=cur,s=m.s;$("dt").textContent=m.n+" – "+m.ln;
+ const L=(a,col)=>{const b=avg(a.slice(0,4));return `<polyline fill="none" stroke="${col}" stroke-width="2.5" points="${a.map((v,i)=>(30+i*65)+","+(170-cl(v/b*100-80,0,100)*1.5)).join(" ")}"/>`};
+ $("ch").innerHTML=`<line x1="30" x2="500" y1="${170-30}" y2="${170-30}" stroke="var(--bd)"/><text x="32" y="${170-34}" fill="var(--mu)" font-size="10">baseline 100%</text>`+L(m.v,"var(--rd)")+L(m.t,"var(--am)")+L(m.c,"var(--bl)")+`<text x="30" y="14" fill="var(--rd)" font-size="12">Vibration</text><text x="110" y="14" fill="var(--am)" font-size="12">Temperature</text><text x="210" y="14" fill="var(--bl)" font-size="12">Current</text>`;
+ const w=m.win;
+ $("detail").innerHTML=`<p>Failure pattern: <b>${s.pat}</b>. Anomaly score ${s.A.toFixed(1)}/6, ${m.f} failures in 12 months, ${m.d} days since service (interval ${m.iv}).</p><p><b>Recommendation:</b> ${s.act}${s.dn?"":s.act=="Act now"?" – stop-and-fix within "+Math.max(1,Math.floor(Math.min(s.rul,w)))+" days, ahead of the "+w+"-day planned window":s.act=="Schedule in window"?" – bundle into the planned shutdown in "+w+" days":""}.<br>${DX[s.pat]}.</p>`;
+ $("pmb").textContent=done[m.n]?"Undo maintenance for "+m.n:"Apply recommended maintenance to "+m.n;
+ const base=m.s,o={...m,};
+ $("wi").innerHTML=`<p class="mu">Planned maintenance cost ₹${m.pm} L vs. expected unplanned loss ₹${s.loss.toFixed(1)} L (${(s.p*100).toFixed(0)}% failure chance).</p>`}
+$("tbl").addEventListener("click",e=>{const t=e.target.closest("tr.t");if(t){cur=M.find(x=>x.n==t.dataset.n);render()}});
+$("pmb").onclick=()=>{done[cur.n]=!done[cur.n];render()};
+const A={
+ risk:()=>"Highest expected loss:\n"+M.slice(0,3).map((m,i)=>`${i+1}. ${m.n}: ${(m.s.p*100).toFixed(0)}% failure chance, ~${m.s.rul>=30?"30+":m.s.rul.toFixed(0)} days of life left, expected loss ₹${m.s.loss.toFixed(1)} L`).join("\n"),
+ pat:()=>{const g={};M.filter(m=>!m.s.dn&&m.s.pat!="none").forEach(m=>(g[m.s.pat]=g[m.s.pat]||[]).push(m.n));return "Failure patterns detected:\n"+Object.entries(g).map(([k,v])=>`• ${k}: ${v.join(", ")} – ${DX[k]}`).join("\n")},
+ plan:()=>"Maintenance plan:\n"+M.filter(m=>m.s.act!="Monitor"&&!m.s.dn).map(m=>`• ${m.n}: ${m.s.act}${m.s.act=="Schedule in window"?" (in "+m.win+" d)":""} – ${DX[m.s.pat]}`).join("\n")
+};
+document.querySelectorAll("button[data-q]").forEach(b=>b.onclick=()=>$("agent").textContent=A[b.dataset.q]());
+render();
+</script></body></html>
